@@ -14,6 +14,7 @@ async-cache = "^1.1.1"
 asyncpg = "^0.30.0"
 google-api-python-client = "^2.183.0"
 google-auth = "^2.40.3"
+python-dateutil = "^2.9.0.post0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.0.291"
