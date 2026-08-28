@@ -29,7 +29,9 @@ assert "DATABASE_URL" in app.config, f"{prefix}_DATABASE_URL env var is required
 
 _google_credentials_path = app.config.get("GOOGLE_CREDENTIALS_PATH", "/app/credentials.json")
 _google_calendar_id = app.config["GOOGLE_CALENDAR_ID"]
-_google_service = build_service(_google_credentials_path)
+assert _google_calendar_id.strip(), f"{prefix}_GOOGLE_CALENDAR_ID must not be empty"
+app.logger.info(f"Using Google Calendar ID: {_google_calendar_id}")
+_google_service = None
 _db_pool = None
 
 _creds_hash = get_credentials_hash(app.config["ISU_USERNAME"], app.config["ISU_PASSWORD"])
@@ -51,8 +53,17 @@ async def _get_db_pool():
     return _db_pool
 
 
+def _get_google_service():
+    global _google_service
+    if _google_service is None:
+        _google_service = build_service(_google_credentials_path)
+    return _google_service
+
+
 @app.route(_sync_route, methods=["POST", "GET"])
 async def sync_schedule_to_google_calendar():
+    google_service = _get_google_service()
+
     async with ClientSession() as session:
         token = await get_access_token(session, app.config["ISU_USERNAME"], app.config["ISU_PASSWORD"])
         lessons = await get_raw_lessons(session, token)
@@ -79,7 +90,7 @@ async def sync_schedule_to_google_calendar():
             continue
 
         if state is None or state.status == "deleted_from_source":
-            google_event_id = await create_event(_google_service, _google_calendar_id, source_event)
+            google_event_id = await create_event(google_service, _google_calendar_id, source_event)
             await upsert_state(pool, source_uid, google_event_id, source_event.payload_hash, "active")
             stats["created"] += 1
             continue
@@ -89,7 +100,7 @@ async def sync_schedule_to_google_calendar():
             continue
 
         is_updated = await update_event(
-            _google_service,
+            google_service,
             _google_calendar_id,
             state.google_event_id,
             source_event,
@@ -106,7 +117,7 @@ async def sync_schedule_to_google_calendar():
         if state.status != "active" or source_uid in source_events:
             continue
 
-        await delete_event(_google_service, _google_calendar_id, state.google_event_id)
+        await delete_event(google_service, _google_calendar_id, state.google_event_id)
         await upsert_state(pool, source_uid, state.google_event_id, state.last_payload_hash, "deleted_from_source")
         stats["deleted"] += 1
 

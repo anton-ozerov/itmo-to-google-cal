@@ -29,10 +29,16 @@ def build_service(credentials_path: str):
     if not creds_path.exists():
         raise FileNotFoundError(f"Google credentials file not found: {credentials_path}")
 
-    credentials = service_account.Credentials.from_service_account_file(
-        str(creds_path),
-        scopes=[_CALENDAR_SCOPE],
-    )
+    try:
+        credentials = service_account.Credentials.from_service_account_file(
+            str(creds_path),
+            scopes=[_CALENDAR_SCOPE],
+        )
+    except Exception as error:
+        raise RuntimeError(
+            "Failed to initialize Google service account credentials from "
+            f"{credentials_path}. Ensure credentials.json is a Service Account key JSON.",
+        ) from error
     return build("calendar", "v3", credentials=credentials, cache_discovery=False)
 
 
