@@ -11,6 +11,8 @@ services:
       ITMO_ICAL_ISU_PASSWORD: "${ITMO_ICAL_ISU_PASSWORD}"
       ITMO_ICAL_GOOGLE_CALENDAR_ID: "${ITMO_ICAL_GOOGLE_CALENDAR_ID}"
       ITMO_ICAL_GOOGLE_CREDENTIALS_PATH: "/run/secrets/google_credentials.json"
+      ITMO_ICAL_GOOGLE_REFRESH_TOKEN: "${ITMO_ICAL_GOOGLE_REFRESH_TOKEN:-}"
+      ITMO_ICAL_GOOGLE_TOKEN_URI: "${ITMO_ICAL_GOOGLE_TOKEN_URI:-https://oauth2.googleapis.com/token}"
       ITMO_ICAL_DATABASE_URL: "${ITMO_ICAL_DATABASE_URL}"
     volumes:
       - ./credentials.json:/run/secrets/google_credentials.json:ro

@@ -28,6 +28,8 @@ assert "GOOGLE_CALENDAR_ID" in app.config, f"{prefix}_GOOGLE_CALENDAR_ID env var
 assert "DATABASE_URL" in app.config, f"{prefix}_DATABASE_URL env var is required"
 
 _google_credentials_path = app.config.get("GOOGLE_CREDENTIALS_PATH", "/app/credentials.json")
+_google_refresh_token = app.config.get("GOOGLE_REFRESH_TOKEN")
+_google_token_uri = app.config.get("GOOGLE_TOKEN_URI", "https://oauth2.googleapis.com/token")
 _google_calendar_id = app.config["GOOGLE_CALENDAR_ID"]
 assert _google_calendar_id.strip(), f"{prefix}_GOOGLE_CALENDAR_ID must not be empty"
 app.logger.info(f"Using Google Calendar ID: {_google_calendar_id}")
@@ -56,7 +58,11 @@ async def _get_db_pool():
 def _get_google_service():
     global _google_service
     if _google_service is None:
-        _google_service = build_service(_google_credentials_path)
+        _google_service = build_service(
+            _google_credentials_path,
+            refresh_token=_google_refresh_token,
+            token_uri=_google_token_uri,
+        )
     return _google_service
 
 

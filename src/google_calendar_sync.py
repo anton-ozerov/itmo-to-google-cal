@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from dataclasses import dataclass
 from pathlib import Path
 
+from google.auth.transport.requests import Request
 from google.oauth2 import service_account
+from google.oauth2.credentials import Credentials as UserCredentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
@@ -15,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 _SYNC_ID_TAG = "ITMO_SYNC_ID"
 _CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar"
+_DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 
 @dataclass(frozen=True)
@@ -24,21 +28,77 @@ class ExistingGoogleEvent:
     description: str | None
 
 
-def build_service(credentials_path: str):
+def _build_service_account_credentials(credentials_path: str):
+    return service_account.Credentials.from_service_account_file(
+        credentials_path,
+        scopes=[_CALENDAR_SCOPE],
+    )
+
+
+def _build_authorized_user_credentials(credentials_path: str):
+    credentials = UserCredentials.from_authorized_user_file(credentials_path, scopes=[_CALENDAR_SCOPE])
+    if not credentials.valid:
+        credentials.refresh(Request())
+    return credentials
+
+
+def _build_oauth_credentials_from_client_config(
+    credentials_info: dict,
+    refresh_token: str | None,
+    token_uri: str,
+):
+    oauth_config = credentials_info.get("installed") or credentials_info.get("web")
+    if not isinstance(oauth_config, dict):
+        raise RuntimeError("Unsupported Google credentials format")
+
+    if not refresh_token:
+        raise RuntimeError(
+            "OAuth client credentials detected in credentials.json, but refresh token is missing. "
+            "Set ITMO_ICAL_GOOGLE_REFRESH_TOKEN.",
+        )
+
+    client_id = oauth_config.get("client_id")
+    client_secret = oauth_config.get("client_secret")
+    if not client_id or not client_secret:
+        raise RuntimeError("OAuth client credentials must include client_id and client_secret")
+
+    credentials = UserCredentials(
+        token=None,
+        refresh_token=refresh_token,
+        token_uri=token_uri,
+        client_id=client_id,
+        client_secret=client_secret,
+        scopes=[_CALENDAR_SCOPE],
+    )
+    credentials.refresh(Request())
+    return credentials
+
+
+def build_service(credentials_path: str, refresh_token: str | None = None, token_uri: str = _DEFAULT_TOKEN_URI):
     creds_path = Path(credentials_path)
     if not creds_path.exists():
         raise FileNotFoundError(f"Google credentials file not found: {credentials_path}")
 
     try:
-        credentials = service_account.Credentials.from_service_account_file(
-            str(creds_path),
-            scopes=[_CALENDAR_SCOPE],
-        )
+        credentials_info = json.loads(creds_path.read_text(encoding="utf-8"))
+    except Exception as error:
+        raise RuntimeError(f"Failed to parse Google credentials file: {credentials_path}") from error
+
+    try:
+        if credentials_info.get("type") == "service_account":
+            credentials = _build_service_account_credentials(str(creds_path))
+        elif credentials_info.get("type") == "authorized_user":
+            credentials = _build_authorized_user_credentials(str(creds_path))
+        elif "installed" in credentials_info or "web" in credentials_info:
+            credentials = _build_oauth_credentials_from_client_config(credentials_info, refresh_token, token_uri)
+        else:
+            raise RuntimeError("Unsupported Google credentials format")
     except Exception as error:
         raise RuntimeError(
-            "Failed to initialize Google service account credentials from "
-            f"{credentials_path}. Ensure credentials.json is a Service Account key JSON.",
+            "Failed to initialize Google credentials. Supported formats: service account key JSON, "
+            "authorized_user JSON, or OAuth client JSON (installed/web) with ITMO_ICAL_GOOGLE_REFRESH_TOKEN.",
         ) from error
+
     return build("calendar", "v3", credentials=credentials, cache_discovery=False)
 
 

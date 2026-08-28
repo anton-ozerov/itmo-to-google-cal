@@ -14,7 +14,10 @@
 ## Что нужно
 
 - Docker + Docker Compose
-- `credentials.json` с ключом **Service Account** для Google Calendar API
+- `credentials.json` одного из форматов:
+  - Service Account key JSON (`"type": "service_account"`), или
+  - OAuth Authorized User JSON (`"type": "authorized_user"`), или
+  - OAuth Client JSON (`"installed"` / `"web"`) + `ITMO_ICAL_GOOGLE_REFRESH_TOKEN`
 - логин и пароль ИСУ
 - ID календаря Google (`ITMO_ICAL_GOOGLE_CALENDAR_ID`)
 
@@ -27,6 +30,7 @@ ITMO_ICAL_ISU_USERNAME=100000
 ITMO_ICAL_ISU_PASSWORD=XXXXXXXXXXXXX
 ITMO_ICAL_GOOGLE_CALENDAR_ID=primary
 ITMO_ICAL_DATABASE_URL=<postgres-connection-url>
+ITMO_ICAL_GOOGLE_REFRESH_TOKEN=<refresh-token> # только для credentials.json с "installed"/"web"
 ```
 
 2. Положите `credentials.json` в корень проекта.
