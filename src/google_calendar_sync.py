@@ -44,7 +44,7 @@ def _description_with_sync_id(description: str, source_uid: str) -> str:
 
 
 def build_create_payload(event: SyncEvent) -> dict:
-    payload = {
+    payload: dict[str, object] = {
         "summary": event.summary,
         "description": _description_with_sync_id(event.description, event.source_uid),
         "start": {"dateTime": event.start_iso, "timeZone": "Europe/Moscow"},
@@ -59,7 +59,7 @@ def build_create_payload(event: SyncEvent) -> dict:
 
 def build_update_payload(event: SyncEvent, existing_event: ExistingGoogleEvent) -> dict:
     description = _description_with_sync_id(existing_event.description or event.description, event.source_uid)
-    payload = {
+    payload: dict[str, object] = {
         "description": description,
         "start": {"dateTime": event.start_iso, "timeZone": "Europe/Moscow"},
         "end": {"dateTime": event.end_iso, "timeZone": "Europe/Moscow"},

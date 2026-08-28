@@ -9,7 +9,7 @@ from sentry_sdk.integrations.flask import FlaskIntegration
 
 from auth import get_access_token
 from credentials_hashing import get_credentials_hash
-from google_calendar_sync import create_event, delete_event, update_event, build_service
+from google_calendar_sync import build_service, create_event, delete_event, update_event
 from lessons_to_events import raw_lesson_to_sync_event
 from main_api import get_raw_lessons
 from sync_state_repository import SyncState, create_pool, load_states, upsert_state

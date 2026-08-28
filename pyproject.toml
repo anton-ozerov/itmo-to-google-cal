@@ -46,6 +46,10 @@ ignore_missing_imports = true
 module = ["googleapiclient.*", "google.oauth2.*", "cache.*"]
 ignore_missing_imports = true
 
+[[tool.mypy.overrides]]
+module = ["asyncpg.*"]
+ignore_missing_imports = true
+
 
 [tool.ruff]
 line-length = 120
