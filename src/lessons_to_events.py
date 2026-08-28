@@ -1,9 +1,11 @@
+from __future__ import annotations
+
+import json
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from hashlib import md5
-from uuid import UUID
+from hashlib import sha256
 
 from dateutil.parser import isoparse
-from ics import Event
 
 _lesson_type_to_tag_map = {
     "Лекции": "Лек",
@@ -21,6 +23,18 @@ _raw_lesson_key_names = {
     "zoom_info": "Доп. информация для Zoom",
     "note": "Примечание",
 }
+
+
+@dataclass(frozen=True)
+class SyncEvent:
+    source_uid: str
+    summary: str
+    start_iso: str
+    end_iso: str
+    location: str | None
+    description: str
+    source_url: str | None
+    payload_hash: str
 
 
 def _lesson_type_to_tag(t: str):
@@ -52,33 +66,56 @@ def _raw_lesson_to_location(raw_lesson: dict):
     return result if result else None
 
 
-def _raw_lesson_to_uuid(raw_lesson: dict):
+def _raw_lesson_to_source_uid(raw_lesson: dict):
     elements = [
         raw_lesson["date"],
         raw_lesson["time_start"],
         raw_lesson["subject"],
     ]
-    result = ", ".join(elements)
-    md5_of_lesson = md5(result.encode("utf-8")).hexdigest()
-    result_uuid = str(UUID(hex=md5_of_lesson))
-    return result_uuid
+    source_material = ", ".join(elements)
+    return sha256(source_material.encode("utf-8")).hexdigest()
 
 
-def raw_lesson_to_event(raw_lesson: dict) -> Event:
+def _payload_hash(
+    summary: str,
+    start_iso: str,
+    end_iso: str,
+    location: str | None,
+    description: str,
+    source_url: str | None,
+) -> str:
+    payload = {
+        "summary": summary,
+        "start": start_iso,
+        "end": end_iso,
+        "location": location,
+        "description": description,
+        "source_url": source_url,
+    }
+    json_payload = json.dumps(payload, sort_keys=True, ensure_ascii=False)
+    return sha256(json_payload.encode("utf-8")).hexdigest()
+
+
+def raw_lesson_to_sync_event(raw_lesson: dict) -> SyncEvent:
     begin = isoparse(f"{raw_lesson['date']}T{raw_lesson['time_start']}:00+03:00")
     end = isoparse(f"{raw_lesson['date']}T{raw_lesson['time_end']}:00+03:00")
-    # If there is a mistake in event
     if begin > end:
         begin, end = end, begin
-    event = Event(
-        name=f"[{_lesson_type_to_tag(raw_lesson['type'])}] {raw_lesson['subject']}",
-        begin=begin,
-        end=end,
-        description=_raw_lesson_to_description(raw_lesson),
-        location=_raw_lesson_to_location(raw_lesson),
-        uid=_raw_lesson_to_uuid(raw_lesson),
-    )
-    if raw_lesson["zoom_url"]:
-        event.url = raw_lesson["zoom_url"]
 
-    return event
+    summary = f"[{_lesson_type_to_tag(raw_lesson['type'])}] {raw_lesson['subject']}"
+    description = _raw_lesson_to_description(raw_lesson)
+    location = _raw_lesson_to_location(raw_lesson)
+    source_url = raw_lesson.get("zoom_url")
+    start_iso = begin.isoformat()
+    end_iso = end.isoformat()
+
+    return SyncEvent(
+        source_uid=_raw_lesson_to_source_uid(raw_lesson),
+        summary=summary,
+        start_iso=start_iso,
+        end_iso=end_iso,
+        location=location,
+        description=description,
+        source_url=source_url,
+        payload_hash=_payload_hash(summary, start_iso, end_iso, location, description, source_url),
+    )
