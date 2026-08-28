@@ -34,7 +34,6 @@ _google_calendar_id = app.config["GOOGLE_CALENDAR_ID"]
 assert _google_calendar_id.strip(), f"{prefix}_GOOGLE_CALENDAR_ID must not be empty"
 app.logger.info(f"Using Google Calendar ID: {_google_calendar_id}")
 _google_service = None
-_db_pool = None
 
 _creds_hash = get_credentials_hash(app.config["ISU_USERNAME"], app.config["ISU_PASSWORD"])
 _sync_route = f"/sync/{_creds_hash}"
@@ -46,13 +45,6 @@ if app.config.get("SENTRY_DSN"):
         integrations=[FlaskIntegration()],
         traces_sample_rate=1.0,
     )
-
-
-async def _get_db_pool():
-    global _db_pool
-    if _db_pool is None:
-        _db_pool = await create_pool(app.config["DATABASE_URL"])
-    return _db_pool
 
 
 def _get_google_service():
@@ -76,56 +68,59 @@ async def sync_schedule_to_google_calendar():
 
     source_events = {event.source_uid: event for event in map(raw_lesson_to_sync_event, lessons)}
 
-    pool = await _get_db_pool()
-    states = await load_states(pool)
+    pool = await create_pool(app.config["DATABASE_URL"])
+    try:
+        states = await load_states(pool)
 
-    stats = {
-        "source_events": len(source_events),
-        "created": 0,
-        "updated": 0,
-        "deleted": 0,
-        "skipped_manual_delete": 0,
-        "unchanged": 0,
-    }
+        stats = {
+            "source_events": len(source_events),
+            "created": 0,
+            "updated": 0,
+            "deleted": 0,
+            "skipped_manual_delete": 0,
+            "unchanged": 0,
+        }
 
-    for source_uid, source_event in source_events.items():
-        state: SyncState | None = states.get(source_uid)
+        for source_uid, source_event in source_events.items():
+            state: SyncState | None = states.get(source_uid)
 
-        if state is not None and state.status == "deleted_by_user":
-            stats["skipped_manual_delete"] += 1
-            continue
+            if state is not None and state.status == "deleted_by_user":
+                stats["skipped_manual_delete"] += 1
+                continue
 
-        if state is None or state.status == "deleted_from_source":
-            google_event_id = await create_event(google_service, _google_calendar_id, source_event)
-            await upsert_state(pool, source_uid, google_event_id, source_event.payload_hash, "active")
-            stats["created"] += 1
-            continue
+            if state is None or state.status == "deleted_from_source":
+                google_event_id = await create_event(google_service, _google_calendar_id, source_event)
+                await upsert_state(pool, source_uid, google_event_id, source_event.payload_hash, "active")
+                stats["created"] += 1
+                continue
 
-        if source_event.payload_hash == state.last_payload_hash:
-            stats["unchanged"] += 1
-            continue
+            if source_event.payload_hash == state.last_payload_hash:
+                stats["unchanged"] += 1
+                continue
 
-        is_updated = await update_event(
-            google_service,
-            _google_calendar_id,
-            state.google_event_id,
-            source_event,
-        )
-        if not is_updated:
-            await upsert_state(pool, source_uid, state.google_event_id, source_event.payload_hash, "deleted_by_user")
-            stats["skipped_manual_delete"] += 1
-            continue
+            is_updated = await update_event(
+                google_service,
+                _google_calendar_id,
+                state.google_event_id,
+                source_event,
+            )
+            if not is_updated:
+                await upsert_state(pool, source_uid, state.google_event_id, source_event.payload_hash, "deleted_by_user")
+                stats["skipped_manual_delete"] += 1
+                continue
 
-        await upsert_state(pool, source_uid, state.google_event_id, source_event.payload_hash, "active")
-        stats["updated"] += 1
+            await upsert_state(pool, source_uid, state.google_event_id, source_event.payload_hash, "active")
+            stats["updated"] += 1
 
-    for source_uid, state in states.items():
-        if state.status != "active" or source_uid in source_events:
-            continue
+        for source_uid, state in states.items():
+            if state.status != "active" or source_uid in source_events:
+                continue
 
-        await delete_event(google_service, _google_calendar_id, state.google_event_id)
-        await upsert_state(pool, source_uid, state.google_event_id, state.last_payload_hash, "deleted_from_source")
-        stats["deleted"] += 1
+            await delete_event(google_service, _google_calendar_id, state.google_event_id)
+            await upsert_state(pool, source_uid, state.google_event_id, state.last_payload_hash, "deleted_from_source")
+            stats["deleted"] += 1
+    finally:
+        await pool.close()
 
     return jsonify(stats)
 
