@@ -11,14 +11,5 @@ flow = InstalledAppFlow.from_client_secrets_file(
 
 credentials = flow.run_local_server(port=0)
 
-print("ACCESS TOKEN:")
-print(credentials.token)
-
-print("\nREFRESH TOKEN:")
+print("REFRESH TOKEN:")
 print(credentials.refresh_token)
-
-print("\nCLIENT ID:")
-print(credentials.client_id)
-
-print("\nCLIENT SECRET:")
-print(credentials.client_secret)

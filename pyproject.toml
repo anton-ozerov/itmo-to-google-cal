@@ -45,7 +45,7 @@ module = ["cache.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
-module = ["googleapiclient.*", "google.oauth2.*", "cache.*"]
+module = ["googleapiclient.*", "google.oauth2.*", "google_auth_oauthlib.*", "cache.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

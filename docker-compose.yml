@@ -19,6 +19,18 @@ services:
     depends_on:
       - postgres
 
+  scheduler:
+    build: .
+    restart: unless-stopped
+    entrypoint: ["/app/.venv/bin/python", "/app/src/scheduler.py"]
+    environment:
+      ITMO_ICAL_ISU_USERNAME: "${ITMO_ICAL_ISU_USERNAME}"
+      ITMO_ICAL_ISU_PASSWORD: "${ITMO_ICAL_ISU_PASSWORD}"
+      ITMO_ICAL_SYNC_BASE_URL: "${ITMO_ICAL_SYNC_BASE_URL:-http://app:35601}"
+      ITMO_ICAL_SYNC_INTERVAL_SECONDS: "${ITMO_ICAL_SYNC_INTERVAL_SECONDS:-5400}"
+    depends_on:
+      - app
+
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped

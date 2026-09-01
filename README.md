@@ -10,6 +10,7 @@
 - в описание каждого синхронизированного события добавляется `ITMO_SYNC_ID: ...`.
 
 Информация о синхронизации хранится в PostgreSQL (`synced_events`), поэтому сервис знает, какие события уже обрабатывались.
+В `docker-compose` также поднимается отдельный `scheduler`, который автоматически запускает sync каждые 1.5 часа.
 
 ## Что нужно
 
@@ -31,6 +32,7 @@ ITMO_ICAL_ISU_PASSWORD=XXXXXXXXXXXXX
 ITMO_ICAL_GOOGLE_CALENDAR_ID=primary
 ITMO_ICAL_DATABASE_URL=<postgres-connection-url>
 ITMO_ICAL_GOOGLE_REFRESH_TOKEN=<refresh-token> # только для credentials.json с "installed"/"web"
+ITMO_ICAL_SYNC_INTERVAL_SECONDS=5400
 ```
 
 2. Положите `credentials.json` в корень проекта.
@@ -49,7 +51,8 @@ HOST_IP=$(curl -s ipinfo.io/ip)
 echo "http://$HOST_IP:35601$SYNC_PATH"
 ```
 
-5. Вызовите URL (`GET` или `POST`) для запуска синхронизации.
+5. Синхронизация запускается автоматически каждые 5400 секунд (1.5 часа) сервисом `scheduler`.
+   При необходимости можно запускать вручную через URL (`GET` или `POST`).
 
 Пример ответа:
 
