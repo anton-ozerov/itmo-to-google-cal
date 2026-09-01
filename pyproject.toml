@@ -7,11 +7,15 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-ics = "^0.7.2"
 Flask = {extras = ["async"], version = "^2.3.3"}
 sentry-sdk = {extras = ["flask"], version = "^1.4.3"}
 aiohttp = "^3.8.5"
 async-cache = "^1.1.1"
+asyncpg = "^0.30.0"
+google-api-python-client = "^2.183.0"
+google-auth = "^2.40.3"
+python-dateutil = "^2.9.0.post0"
+google-auth-oauthlib = "^1.4.1"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.0.291"
@@ -37,7 +41,15 @@ files = ["src"]
 [[tool.mypy.overrides]]
 # https://mypy.readthedocs.io/en/stable/running_mypy.html#missing-imports
 # it's better to disable untyped modules on a per-module basis
-module = ["ics.*", "cache.*"]
+module = ["cache.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["googleapiclient.*", "google.oauth2.*", "google_auth_oauthlib.*", "cache.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["asyncpg.*"]
 ignore_missing_imports = true
 
 

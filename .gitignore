@@ -2,6 +2,8 @@
 .vscode
 venv
 .venv
+.env
+credentials.json
 
 __pycache__/
 *.py[cod]

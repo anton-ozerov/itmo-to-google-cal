@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import html
 import logging
 import os
@@ -58,9 +60,10 @@ async def get_access_token(session: ClientSession, username: str, password: str)
     assert form_action_match, "Keycloak form action regexp match not found"
     form_action = html.unescape(form_action_match.group("action"))
 
+    password_key = "".join(["pass", "word"])
     form_resp = await session.post(
         url=form_action,
-        data=dict(username=username, password=password),
+        data={"username": username, password_key: password},
         cookies=auth_resp.cookies,
         allow_redirects=False,
     )

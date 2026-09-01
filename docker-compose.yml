@@ -1,0 +1,45 @@
+version: "3.9"
+
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "35601:35601"
+    environment:
+      ITMO_ICAL_ISU_USERNAME: "${ITMO_ICAL_ISU_USERNAME}"
+      ITMO_ICAL_ISU_PASSWORD: "${ITMO_ICAL_ISU_PASSWORD}"
+      ITMO_ICAL_GOOGLE_CALENDAR_ID: "${ITMO_ICAL_GOOGLE_CALENDAR_ID}"
+      ITMO_ICAL_GOOGLE_CREDENTIALS_PATH: "/run/secrets/google_credentials.json"
+      ITMO_ICAL_GOOGLE_REFRESH_TOKEN: "${ITMO_ICAL_GOOGLE_REFRESH_TOKEN:-}"
+      ITMO_ICAL_GOOGLE_TOKEN_URI: "${ITMO_ICAL_GOOGLE_TOKEN_URI:-https://oauth2.googleapis.com/token}"
+      ITMO_ICAL_DATABASE_URL: "${ITMO_ICAL_DATABASE_URL}"
+    volumes:
+      - ./credentials.json:/run/secrets/google_credentials.json:ro
+    depends_on:
+      - postgres
+
+  scheduler:
+    build: .
+    restart: unless-stopped
+    entrypoint: ["/app/.venv/bin/python", "/app/src/scheduler.py"]
+    environment:
+      ITMO_ICAL_ISU_USERNAME: "${ITMO_ICAL_ISU_USERNAME}"
+      ITMO_ICAL_ISU_PASSWORD: "${ITMO_ICAL_ISU_PASSWORD}"
+      ITMO_ICAL_SYNC_BASE_URL: "${ITMO_ICAL_SYNC_BASE_URL:-http://app:35601}"
+      ITMO_ICAL_SYNC_INTERVAL_SECONDS: "${ITMO_ICAL_SYNC_INTERVAL_SECONDS:-5400}"
+    depends_on:
+      - app
+
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: itmo_ical
+      POSTGRES_PASSWORD: itmo_ical
+      POSTGRES_DB: itmo_ical
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+volumes:
+  postgres_data:

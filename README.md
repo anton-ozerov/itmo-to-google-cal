@@ -1,62 +1,74 @@
-# ITMO schedule to iCalendar converter
+# ITMO schedule to Google Calendar sync
 
-Сервис, который ходит на my.itmo.ru за расписанием и экспортирует его как iCalendar с публичной ссылкой. Позволяет автоматически и с автообновлением экспортировать пары в календари Google, iCloud и другие.
+Сервис берет расписание с my.itmo.ru и синхронизирует его напрямую в Google Calendar через API.
+
+Вместо `.ics` теперь используется односторонняя синхронизация:
+- новые пары создаются как события Google Calendar;
+- изменения расписания обновляют существующие события;
+- удаленные пары удаляются из Google Calendar;
+- если вы вручную удалили синхронизированное событие, сервис **не создаст его заново**;
+- в описание каждого синхронизированного события добавляется `ITMO_SYNC_ID: ...`.
+
+Информация о синхронизации хранится в PostgreSQL (`synced_events`), поэтому сервис знает, какие события уже обрабатывались.
+В `docker-compose` также поднимается отдельный `scheduler`, который автоматически запускает sync каждые 1.5 часа.
 
 ## Что нужно
 
-Логин и пароль от ИСУ, поэтому безопасности ради захостить себе сервис придётся самостоятельно.
+- Docker + Docker Compose
+- `credentials.json` одного из форматов:
+  - Service Account key JSON (`"type": "service_account"`), или
+  - OAuth Authorized User JSON (`"type": "authorized_user"`), или
+  - OAuth Client JSON (`"installed"` / `"web"`) + `ITMO_ICAL_GOOGLE_REFRESH_TOKEN`
+- логин и пароль ИСУ
+- ID календаря Google (`ITMO_ICAL_GOOGLE_CALENDAR_ID`)
 
-Нужен **личный** сервер (без доступа у посторонних) с `docker` на нём.
+## Быстрый запуск
 
-## Как завести
+1. Создайте `.env` рядом с `docker-compose.yml`:
 
-1. Подставить username/password в команду и запустить контейнер:
+```env
+ITMO_ICAL_ISU_USERNAME=100000
+ITMO_ICAL_ISU_PASSWORD=XXXXXXXXXXXXX
+ITMO_ICAL_GOOGLE_CALENDAR_ID=primary
+ITMO_ICAL_DATABASE_URL=<postgres-connection-url>
+ITMO_ICAL_GOOGLE_REFRESH_TOKEN=<refresh-token> # только для credentials.json с "installed"/"web"
+ITMO_ICAL_SYNC_INTERVAL_SECONDS=5400
+```
 
-   ```bash
-   APP_PORT=35601
+2. Положите `credentials.json` в корень проекта.
 
-   docker run -d \
-      --restart=unless-stopped \
-      --name itmo_ical \
-      -p=$APP_PORT:35601 \
-      -e ITMO_ICAL_ISU_USERNAME=100000 \
-      -e ITMO_ICAL_ISU_PASSWORD=XXXXXXXXXXXXX \
-      ghcr.io/iburakov/my-itmo-ru-to-ical
-   ```
+3. Поднимите сервис:
 
-2. Получить публичную ссылку на .ics:
+```bash
+docker compose up -d --build
+```
 
-   ```bash
-   URL_PATH=$(docker logs itmo_ical 2>&1 | grep -oh '/calendar/.*')
-   HOST_IP=$(curl -s ipinfo.io/ip)
+4. Получите путь синхронизации:
 
-   echo "http://$HOST_IP:$APP_PORT$URL_PATH"
+```bash
+SYNC_PATH=$(docker logs $(docker compose ps -q app) 2>&1 | grep -oh '/sync/.*' | tail -n 1)
+HOST_IP=$(curl -s ipinfo.io/ip)
+echo "http://$HOST_IP:35601$SYNC_PATH"
+```
 
-   # должно выглядеть как-то так:
-   # http://93.184.216.34:35601/calendar/gnKZT88jeuKDdhh7Ow8mwsAbMpIyVKaCBpl2CtqJqYI
-   ```
+5. Синхронизация запускается автоматически каждые 5400 секунд (1.5 часа) сервисом `scheduler`.
+   При необходимости можно запускать вручную через URL (`GET` или `POST`).
 
-3. Если по ссылке скачивается .ics файл, всё работает
-4. Импортировать ссылку в свой календарь. Он будет периодически повторять запрос для получения обновлений - изменяющиеся аудитории теперь не беда ;)
+Пример ответа:
 
-PS. Ссылка содержит хеш имени пользователя и пароля, чтобы она была и неподбираемой для посторонних, и относительно постоянной без использования какого-либо хранилища. Стоит иметь в виду, что меняется username/password - меняется ссылка.
+```json
+{
+  "created": 3,
+  "deleted": 1,
+  "skipped_manual_delete": 2,
+  "source_events": 42,
+  "unchanged": 34,
+  "updated": 2
+}
+```
 
-## Дополнительно
+## Разработка
 
-⚠ Пароль от ИСУ можно извлечь из контейнера с помощью `docker inspect` / `docker exec`. Безопасность своих ключей - ваша зона ответственности. Убедитесь, что:
-
-- к серверу нет доступа у других людей,
-- включен фаервол,
-- отключена SSH авторизация по паролю и root login,
-- и.т.п.
-
-Docker образы собираются и пушатся в реестр с помощью GitHub Actions - исходники в этом репозитории, соответствующие скрипты сборки и логи общедоступны. Если всё равно стрёмно доверять пароль рандомному образу, можно склонировать репозиторий и сделать `docker build` из исходников самостоятельно.
-
-Также из коробки поддерживается мониторинг ошибок с помощью [Sentry](https://sentry.io/). Можно создать проект (Python/Flask) и передать [DSN](https://docs.sentry.io/product/sentry-basics/dsn-explainer/) в переменную окружения `ITMO_ICAL_SENTRY_DSN` при старте контейнера.
-
-## Как помочь разработке/поддержке
-
-Если какого-то функционала очень не хватает или что-то сломалось, PRs are welcome! Протестить вживую уже не смогу, но стараюсь находить время отсматривать и мержить. Используются:
-
+Используются:
 - Python 3.11 + poetry
-- ruff, black, mypy, vulture в качестве линтеров/форматтеров
+- ruff, black, mypy, vulture
