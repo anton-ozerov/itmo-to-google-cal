@@ -106,6 +106,10 @@ def raw_lesson_to_sync_event(raw_lesson: dict) -> SyncEvent:
     description = _raw_lesson_to_description(raw_lesson)
     location = _raw_lesson_to_location(raw_lesson)
     source_url = raw_lesson.get("zoom_url")
+    if source_url:
+        summary = f"🌐 {summary}"
+    else:
+        summary = f"🏫 {summary}"
     start_iso = begin.isoformat()
     end_iso = end.isoformat()
 
