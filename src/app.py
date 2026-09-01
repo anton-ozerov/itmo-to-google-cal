@@ -33,7 +33,6 @@ _google_token_uri = app.config.get("GOOGLE_TOKEN_URI", "https://oauth2.googleapi
 _google_calendar_id = app.config["GOOGLE_CALENDAR_ID"]
 assert _google_calendar_id.strip(), f"{prefix}_GOOGLE_CALENDAR_ID must not be empty"
 app.logger.info(f"Using Google Calendar ID: {_google_calendar_id}")
-_google_service = None
 
 _creds_hash = get_credentials_hash(app.config["ISU_USERNAME"], app.config["ISU_PASSWORD"])
 _sync_route = f"/sync/{_creds_hash}"
@@ -47,20 +46,17 @@ if app.config.get("SENTRY_DSN"):
     )
 
 
-def _get_google_service():
-    global _google_service
-    if _google_service is None:
-        _google_service = build_service(
-            _google_credentials_path,
-            refresh_token=_google_refresh_token,
-            token_uri=_google_token_uri,
-        )
-    return _google_service
+def _build_google_service():
+    return build_service(
+        _google_credentials_path,
+        refresh_token=_google_refresh_token,
+        token_uri=_google_token_uri,
+    )
 
 
 @app.route(_sync_route, methods=["POST", "GET"])
 async def sync_schedule_to_google_calendar():
-    google_service = _get_google_service()
+    google_service = _build_google_service()
 
     async with ClientSession() as session:
         token = await get_access_token(session, app.config["ISU_USERNAME"], app.config["ISU_PASSWORD"])
