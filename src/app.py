@@ -12,7 +12,7 @@ from credentials_hashing import get_credentials_hash
 from google_calendar_sync import build_service, create_event, delete_event, update_event
 from lessons_to_events import raw_lesson_to_sync_event
 from main_api import get_raw_lessons
-from sync_state_repository import SyncState, create_pool, load_states, upsert_state
+from sync_state_repository import SyncState, create_connection, load_states, upsert_state
 
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("werkzeug").handlers = []  # prevent duplicated logging output
@@ -68,9 +68,9 @@ async def sync_schedule_to_google_calendar():
 
     source_events = {event.source_uid: event for event in map(raw_lesson_to_sync_event, lessons)}
 
-    pool = await create_pool(app.config["DATABASE_URL"])
+    connection = await create_connection(app.config["DATABASE_URL"])
     try:
-        states = await load_states(pool)
+        states = await load_states(connection)
 
         stats = {
             "source_events": len(source_events),
@@ -90,7 +90,7 @@ async def sync_schedule_to_google_calendar():
 
             if state is None or state.status == "deleted_from_source":
                 google_event_id = await create_event(google_service, _google_calendar_id, source_event)
-                await upsert_state(pool, source_uid, google_event_id, source_event.payload_hash, "active")
+                await upsert_state(connection, source_uid, google_event_id, source_event.payload_hash, "active")
                 stats["created"] += 1
                 continue
 
@@ -105,11 +105,17 @@ async def sync_schedule_to_google_calendar():
                 source_event,
             )
             if not is_updated:
-                await upsert_state(pool, source_uid, state.google_event_id, source_event.payload_hash, "deleted_by_user")
+                await upsert_state(
+                    connection,
+                    source_uid,
+                    state.google_event_id,
+                    source_event.payload_hash,
+                    "deleted_by_user",
+                )
                 stats["skipped_manual_delete"] += 1
                 continue
 
-            await upsert_state(pool, source_uid, state.google_event_id, source_event.payload_hash, "active")
+            await upsert_state(connection, source_uid, state.google_event_id, source_event.payload_hash, "active")
             stats["updated"] += 1
 
         for source_uid, state in states.items():
@@ -117,10 +123,16 @@ async def sync_schedule_to_google_calendar():
                 continue
 
             await delete_event(google_service, _google_calendar_id, state.google_event_id)
-            await upsert_state(pool, source_uid, state.google_event_id, state.last_payload_hash, "deleted_from_source")
+            await upsert_state(
+                connection,
+                source_uid,
+                state.google_event_id,
+                state.last_payload_hash,
+                "deleted_from_source",
+            )
             stats["deleted"] += 1
     finally:
-        await pool.close()
+        await connection.close()
 
     return jsonify(stats)
 
