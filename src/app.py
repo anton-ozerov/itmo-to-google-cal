@@ -130,6 +130,8 @@ async def sync_schedule_to_google_calendar():
     finally:
         await connection.close()
 
+    app.logger.info(f"Sync completed for {app.config['ISU_USERNAME']}, hash {_creds_hash}: {stats}")
+
     return jsonify(stats)
 
 

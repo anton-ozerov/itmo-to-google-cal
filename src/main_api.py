@@ -30,6 +30,7 @@ async def _get_calendar_data(session: ClientSession, auth_token: str, path: str)
     auth_header = "Bearer " + auth_token
     resp = await session.get(url, params=params, headers={"Authorization": auth_header})
     resp.raise_for_status()
+    logger.info(f"Got response from {url}")
     return await resp.json()
 
 
