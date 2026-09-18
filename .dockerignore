@@ -1,0 +1,12 @@
+.git
+.github
+.idea
+.vscode
+.venv
+.env
+credentials.json
+__pycache__
+*.py[cod]
+.mypy_cache
+.ruff_cache
+tests

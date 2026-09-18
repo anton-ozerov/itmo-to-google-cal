@@ -42,7 +42,7 @@ async def _sync_once(session: ClientSession, sync_url: str):
 
 async def _run_scheduler():
     sync_url = _build_sync_url()
-    interval_seconds = int(float(os.getenv("ITMO_ICAL_SYNC_INTERVAL_SECONDS", "5400")))
+    interval_seconds = int(float(os.getenv("ITMO_ICAL_SYNC_INTERVAL_SECONDS", "7200")))
 
     if interval_seconds <= 0:
         raise RuntimeError("ITMO_ICAL_SYNC_INTERVAL_SECONDS must be > 0")

@@ -14,14 +14,19 @@ jobs:
       matrix:
         include:
           - tool: black
-            run_cmd: black --check --diff src
+            run_cmd: black --check --diff src tests
           - tool: ruff
-            run_cmd: ruff check --diff src
+            run_cmd: ruff check --diff src tests
           - tool: mypy
             # for mypy we need to install all deps for type hints, type stubs and mypy plugins
             setup_cmd: |
               poetry install --no-root
           - tool: vulture
+          - tool: tests
+            setup_cmd: |
+              poetry config virtualenvs.create false
+              poetry install --no-root
+            run_cmd: PYTHONPATH=src python -m unittest discover -s tests -v
     steps:
       - uses: actions/checkout@v3
       - uses: actions/setup-python@v4
@@ -31,6 +36,7 @@ jobs:
         with:
           poetry-version: 1.6.1
       - name: Install ${{ matrix.tool }} with a version from poetry.lock
+        if: matrix.tool != 'tests'
         # we'll use system python since we're in an action container
         run: |
           poetry config virtualenvs.create false
