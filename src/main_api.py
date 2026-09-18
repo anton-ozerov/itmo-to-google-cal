@@ -1,21 +1,22 @@
 from __future__ import annotations
 
 import logging
-from datetime import date
-from typing import Iterable
+from collections.abc import Iterable
+from datetime import datetime, timedelta, timezone
 
 from aiohttp import ClientSession
 
 logger = logging.getLogger(__name__)
 
 _API_BASE_URL = "https://my.itmo.ru/api"
+_MOSCOW_TIMEZONE = timezone(timedelta(hours=3))
 
 
 def _get_date_range_params() -> dict:
     """Produces start and end dates to request events of current academic term"""
-    pivot = date.today().replace(month=8, day=1)
-    this_year = date.today().year
-    term_start_year = this_year - 1 if date.today() < pivot else this_year
+    today = datetime.now(_MOSCOW_TIMEZONE).date()
+    pivot = today.replace(month=8, day=1)
+    term_start_year = today.year - 1 if today < pivot else today.year
     return dict(
         date_start=f"{term_start_year}-08-01",
         date_end=f"{term_start_year + 1}-07-31",
@@ -36,5 +37,9 @@ async def _get_calendar_data(session: ClientSession, auth_token: str, path: str)
 
 async def get_raw_lessons(session: ClientSession, auth_token: str) -> Iterable[dict]:
     resp_json = await _get_calendar_data(session, auth_token, "/schedule/schedule/personal")
-    days = resp_json["data"]
+    if resp_json.get("code", 0) != 0:
+        raise RuntimeError(f"ITMO schedule API returned error code {resp_json['code']}")
+    days = resp_json.get("data")
+    if not isinstance(days, list):
+        raise TypeError("ITMO schedule API response does not contain a data list")
     return (dict(date=day["date"], **lesson) for day in days for lesson in day["lessons"])

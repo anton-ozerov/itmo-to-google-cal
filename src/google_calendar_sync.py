@@ -6,9 +6,9 @@ import logging
 import ssl
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from google.auth.transport.requests import Request
-from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials as UserCredentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -18,6 +18,8 @@ from lessons_to_events import SyncEvent
 logger = logging.getLogger(__name__)
 
 _SYNC_ID_TAG = "ITMO_SYNC_ID"
+_PRIVATE_SYNC_ID = "itmoSyncId"
+_PRIVATE_MANAGED = "itmoManaged"
 _CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar"
 _DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token"
 _RETRYABLE_HTTP_STATUSES = {408, 429, 500, 502, 503, 504}
@@ -29,20 +31,11 @@ class ExistingGoogleEvent:
     event_id: str
     summary: str
     description: str | None
-
-
-def _build_service_account_credentials(credentials_path: str):
-    return service_account.Credentials.from_service_account_file(
-        credentials_path,
-        scopes=[_CALENDAR_SCOPE],
-    )
-
-
-def _build_authorized_user_credentials(credentials_path: str):
-    credentials = UserCredentials.from_authorized_user_file(credentials_path, scopes=[_CALENDAR_SCOPE])
-    if not credentials.valid:
-        credentials.refresh(Request())
-    return credentials
+    start: dict[str, Any]
+    end: dict[str, Any]
+    location: str | None
+    source: dict[str, Any] | None
+    private_properties: dict[str, str]
 
 
 def _build_oauth_credentials_from_client_config(
@@ -52,7 +45,7 @@ def _build_oauth_credentials_from_client_config(
 ):
     oauth_config = credentials_info.get("installed") or credentials_info.get("web")
     if not isinstance(oauth_config, dict):
-        raise RuntimeError("Unsupported Google credentials format")
+        raise TypeError("credentials.json must contain an installed or web OAuth client configuration")
 
     if not refresh_token:
         raise RuntimeError(
@@ -87,21 +80,7 @@ def build_service(credentials_path: str, refresh_token: str | None = None, token
     except Exception as error:
         raise RuntimeError(f"Failed to parse Google credentials file: {credentials_path}") from error
 
-    try:
-        if credentials_info.get("type") == "service_account":
-            credentials = _build_service_account_credentials(str(creds_path))
-        elif credentials_info.get("type") == "authorized_user":
-            credentials = _build_authorized_user_credentials(str(creds_path))
-        elif "installed" in credentials_info or "web" in credentials_info:
-            credentials = _build_oauth_credentials_from_client_config(credentials_info, refresh_token, token_uri)
-        else:
-            raise RuntimeError("Unsupported Google credentials format")
-    except Exception as error:
-        raise RuntimeError(
-            "Failed to initialize Google credentials. Supported formats: service account key JSON, "
-            "authorized_user JSON, or OAuth client JSON (installed/web) with ITMO_ICAL_GOOGLE_REFRESH_TOKEN.",
-        ) from error
-
+    credentials = _build_oauth_credentials_from_client_config(credentials_info, refresh_token, token_uri)
     return build("calendar", "v3", credentials=credentials, cache_discovery=False)
 
 
@@ -137,38 +116,88 @@ def _description_with_sync_id(description: str, source_uid: str) -> str:
     return f"{description}\n\n{marker}" if description else marker
 
 
-def build_create_payload(event: SyncEvent) -> dict:
-    payload: dict[str, object] = {
+def source_payload_for_event(event: SyncEvent) -> dict[str, Any]:
+    return {
         "summary": event.summary,
-        "description": _description_with_sync_id(event.description, event.source_uid),
+        "description": event.description,
         "start": {"dateTime": event.start_iso, "timeZone": "Europe/Moscow"},
         "end": {"dateTime": event.end_iso, "timeZone": "Europe/Moscow"},
+        "location": event.location,
+        "source": {"title": "ITMO lesson", "url": event.source_url} if event.source_url else None,
     }
-    if event.location:
-        payload["location"] = event.location
-    if event.source_url:
-        payload["source"] = {"title": "ITMO lesson", "url": event.source_url}
+
+
+def build_create_payload(event: SyncEvent) -> dict[str, Any]:
+    payload = source_payload_for_event(event)
+    payload["description"] = _description_with_sync_id(event.description, event.source_uid)
+    payload["extendedProperties"] = {
+        "private": {_PRIVATE_MANAGED: "true", _PRIVATE_SYNC_ID: event.source_uid},
+    }
+    if payload["location"] is None:
+        payload.pop("location")
+    if payload["source"] is None:
+        payload.pop("source")
     return payload
 
 
-def build_update_payload(event: SyncEvent, existing_event: ExistingGoogleEvent) -> dict:
-    description = _description_with_sync_id(existing_event.description or event.description, event.source_uid)
-    payload: dict[str, object] = {
-        "description": description,
-        "start": {"dateTime": event.start_iso, "timeZone": "Europe/Moscow"},
-        "end": {"dateTime": event.end_iso, "timeZone": "Europe/Moscow"},
-    }
-    if event.location:
-        payload["location"] = event.location
-    else:
-        payload["location"] = None
+def _description_without_sync_id(description: str | None, source_uid: str) -> str:
+    if not description:
+        return ""
+    marker = f"{_SYNC_ID_TAG}: {source_uid}"
+    lines = description.splitlines()
+    if lines and lines[-1].strip() == marker:
+        return "\n".join(lines[:-1]).rstrip()
+    return description
 
-    if event.source_url:
-        payload["source"] = {"title": "ITMO lesson", "url": event.source_url}
-    else:
-        payload["source"] = None
+
+def _existing_payload(event: ExistingGoogleEvent, source_uid: str) -> dict[str, Any]:
+    return {
+        "summary": event.summary,
+        "description": _description_without_sync_id(event.description, source_uid),
+        "start": event.start,
+        "end": event.end,
+        "location": event.location,
+        "source": event.source,
+    }
+
+
+def build_update_payload(
+    event: SyncEvent,
+    existing_event: ExistingGoogleEvent,
+    previous_source_payload: dict[str, Any] | None,
+) -> dict[str, Any]:
+    new_source_payload = source_payload_for_event(event)
+    current_payload = _existing_payload(existing_event, event.source_uid)
+    payload: dict[str, Any] = {}
+
+    if previous_source_payload is not None:
+        for field, new_value in new_source_payload.items():
+            old_value = previous_source_payload.get(field)
+            if new_value != old_value and current_payload.get(field) == old_value:
+                payload[field] = (
+                    _description_with_sync_id(new_value, event.source_uid) if field == "description" else new_value
+                )
+    desired_private = dict(existing_event.private_properties)
+    desired_private.update({_PRIVATE_MANAGED: "true", _PRIVATE_SYNC_ID: event.source_uid})
+    if desired_private != existing_event.private_properties:
+        payload["extendedProperties"] = {"private": desired_private}
 
     return payload
+
+
+def _parse_event(raw_event: dict[str, Any]) -> ExistingGoogleEvent | None:
+    if raw_event.get("status") == "cancelled":
+        return None
+    return ExistingGoogleEvent(
+        event_id=raw_event["id"],
+        summary=raw_event.get("summary", ""),
+        description=raw_event.get("description"),
+        start=raw_event.get("start", {}),
+        end=raw_event.get("end", {}),
+        location=raw_event.get("location"),
+        source=raw_event.get("source"),
+        private_properties=raw_event.get("extendedProperties", {}).get("private", {}),
+    )
 
 
 async def get_event(service, calendar_id: str, event_id: str) -> ExistingGoogleEvent | None:
@@ -176,15 +205,35 @@ async def get_event(service, calendar_id: str, event_id: str) -> ExistingGoogleE
     try:
         raw_event = await _execute_request(request)
     except HttpError as error:
-        if error.resp.status == 404:
+        if error.resp.status in {404, 410}:
             return None
         raise
 
-    return ExistingGoogleEvent(
-        event_id=raw_event["id"],
-        summary=raw_event.get("summary", ""),
-        description=raw_event.get("description"),
-    )
+    return _parse_event(raw_event)
+
+
+async def list_managed_events(service, calendar_id: str) -> dict[str, ExistingGoogleEvent]:
+    result: dict[str, ExistingGoogleEvent] = {}
+    page_token = None
+    while True:
+        request = service.events().list(
+            calendarId=calendar_id,
+            privateExtendedProperty=f"{_PRIVATE_MANAGED}=true",
+            showDeleted=False,
+            maxResults=2500,
+            pageToken=page_token,
+        )
+        response = await _execute_request(request)
+        for raw_event in response.get("items", []):
+            event = _parse_event(raw_event)
+            if event is None:
+                continue
+            source_uid = event.private_properties.get(_PRIVATE_SYNC_ID)
+            if source_uid:
+                result.setdefault(source_uid, event)
+        page_token = response.get("nextPageToken")
+        if not page_token:
+            return result
 
 
 async def create_event(service, calendar_id: str, event: SyncEvent) -> str:
@@ -193,15 +242,20 @@ async def create_event(service, calendar_id: str, event: SyncEvent) -> str:
     return raw_event["id"]
 
 
-async def update_event(service, calendar_id: str, google_event_id: str, event: SyncEvent):
-    existing_event = await get_event(service, calendar_id, google_event_id)
-    if existing_event is None:
+async def update_event(
+    service,
+    calendar_id: str,
+    existing_event: ExistingGoogleEvent,
+    event: SyncEvent,
+    previous_source_payload: dict[str, Any] | None,
+) -> bool:
+    payload = build_update_payload(event, existing_event, previous_source_payload)
+    if not payload:
         return False
-
     request = service.events().patch(
         calendarId=calendar_id,
-        eventId=google_event_id,
-        body=build_update_payload(event, existing_event),
+        eventId=existing_event.event_id,
+        body=payload,
     )
     await _execute_request(request)
     return True
@@ -212,7 +266,7 @@ async def delete_event(service, calendar_id: str, google_event_id: str):
     try:
         await _execute_request(request)
     except HttpError as error:
-        if error.resp.status == 404:
+        if error.resp.status in {404, 410}:
             logger.info(f"Google event {google_event_id} already removed")
             return
         raise

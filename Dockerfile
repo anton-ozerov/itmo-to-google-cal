@@ -1,4 +1,4 @@
-FROM python:3.11-slim as base
+FROM python:3.11-slim AS base
 
 RUN mkdir -p /app
 WORKDIR /app
@@ -6,16 +6,14 @@ WORKDIR /app
 RUN useradd --create-home appuser && chown appuser /app
 
 
-FROM base as poetry-deps
+FROM base AS poetry-deps
 
 ARG POETRY_VERSION=1.6.1
 
 ENV LANG=C.UTF-8 \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-
     PIP_NO_CACHE_DIR=off \
-
     POETRY_NO_INTERACTION=1 \
     POETRY_VIRTUALENVS_CREATE=1 \
     POETRY_VIRTUALENVS_IN_PROJECT=1
@@ -30,7 +28,7 @@ RUN poetry install --only=main --no-root --no-cache
 # now we've installed all the required python deps to /app/.venv
 
 
-FROM base as runner
+FROM base AS runner
 
 ARG UWSGI_VERSION=2.0.25
 
@@ -73,11 +71,10 @@ COPY --from=poetry-deps --chown=appuser /app/.venv /app/.venv
 COPY --chown=appuser . .
 
 ENV PYTHONPATH=/app/src:$PYTHONPATH \
-
     UWSGI_WSGI_FILE=src/app.py \
     UWSGI_VIRTUALENV=/app/.venv \
-
     UWSGI_HTTP=0.0.0.0:35601 \
+    UWSGI_HTTP_TIMEOUT=1800 \
     UWSGI_WORKERS=1 \
     UWSGI_THREADS=4 \
     UWSGI_MASTER=1 \

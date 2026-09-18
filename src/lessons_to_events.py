@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from hashlib import sha256
 
 from dateutil.parser import isoparse
@@ -47,8 +46,6 @@ def _raw_lesson_to_description(raw_lesson: dict):
         if raw_lesson.get(key):
             lines.append(f"{name}: {raw_lesson[key]}")
 
-    _msk_formatted_datetime = (datetime.utcnow() + timedelta(hours=3)).strftime("%Y-%m-%d %H:%M")
-    lines.append(f"Обновлено: {_msk_formatted_datetime} MSK")
     return "\n".join(lines)
 
 
@@ -66,14 +63,11 @@ def _raw_lesson_to_location(raw_lesson: dict):
     return result if result else None
 
 
-def _raw_lesson_to_source_uid(raw_lesson: dict):
-    elements = [
-        raw_lesson["date"],
-        raw_lesson["time_start"],
-        raw_lesson["subject"],
-    ]
-    source_material = ", ".join(elements)
-    return sha256(source_material.encode("utf-8")).hexdigest()
+def _raw_lesson_to_source_uid(raw_lesson: dict) -> str:
+    pair_id = raw_lesson.get("pair_id")
+    if pair_id is None:
+        raise ValueError("ITMO lesson does not contain pair_id")
+    return f"pair:{pair_id}"
 
 
 def _payload_hash(
