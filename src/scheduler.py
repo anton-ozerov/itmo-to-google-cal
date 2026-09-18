@@ -48,7 +48,7 @@ async def _run_scheduler():
         raise RuntimeError("ITMO_ICAL_SYNC_INTERVAL_SECONDS must be > 0")
 
     timeout = ClientTimeout(total=1800)
-    logger.info(f"Starting scheduler with interval {interval_seconds}s, sync URL: {sync_url}")
+    logger.info(f"Starting scheduler with interval {interval_seconds}s")
 
     async with ClientSession(timeout=timeout) as session:
         while True:

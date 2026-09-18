@@ -77,9 +77,9 @@ async def sync_schedule_to_google_calendar():
             await release_sync_lock(connection)
         await connection.close()
 
-    app.logger.info(f"Sync completed for {app.config['ISU_USERNAME']}, hash {_creds_hash}: {stats}")
+    app.logger.info(f"Sync completed: {stats}")
 
     return jsonify(stats)
 
 
-sentry_sdk.capture_message(f"my-itmo-ru-to-google-cal started for {app.config['ISU_USERNAME']}, hash {_creds_hash}")
+sentry_sdk.capture_message("my-itmo-ru-to-google-cal started")
