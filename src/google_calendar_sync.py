@@ -3,7 +3,6 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import re
 import ssl
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,7 +25,6 @@ _CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar"
 _DEFAULT_TOKEN_URI = "https://oauth2.googleapis.com/token"
 _RETRYABLE_HTTP_STATUSES = {408, 429, 500, 502, 503, 504}
 _MAX_REQUEST_ATTEMPTS = 3
-_GENERATED_UPDATE_LINE = re.compile(r"^Обновлено: \d{4}-\d{2}-\d{2} \d{2}:\d{2} MSK$")
 
 
 @dataclass(frozen=True)
@@ -181,14 +179,6 @@ def _description_without_sync_id(description: str | None, source_uid: str) -> st
     return description
 
 
-def _legacy_generated_description(description: str | None, source_uid: str) -> str:
-    cleaned = _description_without_sync_id(description, source_uid)
-    lines = cleaned.splitlines()
-    if lines and _GENERATED_UPDATE_LINE.fullmatch(lines[-1]):
-        return "\n".join(lines[:-1]).rstrip()
-    return cleaned
-
-
 def _existing_payload(event: ExistingGoogleEvent, source_uid: str) -> dict[str, Any]:
     return {
         "summary": event.summary,
@@ -216,10 +206,6 @@ def build_update_payload(
                 payload[field] = (
                     _description_with_sync_id(new_value, event.source_uid) if field == "description" else new_value
                 )
-    elif _legacy_generated_description(existing_event.description, event.source_uid) == event.description:
-        if current_payload["description"] != event.description:
-            payload["description"] = _description_with_sync_id(event.description, event.source_uid)
-
     desired_private = dict(existing_event.private_properties)
     desired_private.update({_PRIVATE_MANAGED: "true", _PRIVATE_SYNC_ID: event.source_uid})
     if desired_private != existing_event.private_properties:

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Iterable
-from dataclasses import replace
 
 from google_calendar_sync import (
     ExistingGoogleEvent,
@@ -13,7 +12,7 @@ from google_calendar_sync import (
     update_event,
 )
 from lessons_to_events import SyncEvent
-from sync_state_repository import SyncState, load_states, rename_state, upsert_state
+from sync_state_repository import SyncState, load_states, upsert_state
 
 logger = logging.getLogger(__name__)
 
@@ -25,20 +24,6 @@ def index_source_events(events: Iterable[SyncEvent]) -> dict[str, SyncEvent]:
             raise ValueError(f"ITMO returned duplicate lesson id: {event.source_uid}")
         result[event.source_uid] = event
     return result
-
-
-async def migrate_legacy_states(connection, states: dict[str, SyncState], source_events: dict[str, SyncEvent]) -> None:
-    legacy_counts: dict[str, int] = {}
-    for event in source_events.values():
-        legacy_counts[event.legacy_source_uid] = legacy_counts.get(event.legacy_source_uid, 0) + 1
-
-    for source_uid, event in source_events.items():
-        legacy_uid = event.legacy_source_uid
-        if source_uid in states or legacy_uid not in states or legacy_counts[legacy_uid] != 1:
-            continue
-        legacy_state = states.pop(legacy_uid)
-        await rename_state(connection, legacy_uid, source_uid)
-        states[source_uid] = replace(legacy_state, source_uid=source_uid)
 
 
 class EventLookup:
@@ -111,7 +96,6 @@ async def _remove_source_event(service, calendar_id: str, connection, lookup: Ev
 
 async def synchronize(service, calendar_id: str, source_events: dict[str, SyncEvent], connection) -> dict[str, int]:
     states = await load_states(connection)
-    await migrate_legacy_states(connection, states, source_events)
     lookup = EventLookup(service, calendar_id, await list_managed_events(service, calendar_id))
 
     stats = {

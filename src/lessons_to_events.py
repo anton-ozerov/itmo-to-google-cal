@@ -27,7 +27,6 @@ _raw_lesson_key_names = {
 @dataclass(frozen=True)
 class SyncEvent:
     source_uid: str
-    legacy_source_uid: str
     summary: str
     start_iso: str
     end_iso: str
@@ -64,35 +63,11 @@ def _raw_lesson_to_location(raw_lesson: dict):
     return result if result else None
 
 
-def _legacy_source_uid(raw_lesson: dict) -> str:
-    source_material = ", ".join(
-        [
-            raw_lesson["date"],
-            raw_lesson["time_start"],
-            raw_lesson["subject"],
-        ],
-    )
-    return sha256(source_material.encode("utf-8")).hexdigest()
-
-
 def _raw_lesson_to_source_uid(raw_lesson: dict) -> str:
-    if raw_lesson.get("pair_id") is not None:
-        return f"pair:{raw_lesson['pair_id']}"
-
-    # Older API responses do not always contain pair_id. Keep a deterministic
-    # fallback, but include enough fields to avoid merging simultaneous lessons.
-    elements = [
-        raw_lesson["date"],
-        raw_lesson["time_start"],
-        raw_lesson.get("time_end", ""),
-        raw_lesson["subject"],
-        raw_lesson.get("type", ""),
-        str(raw_lesson.get("teacher_id") or raw_lesson.get("teacher_name") or ""),
-        str(raw_lesson.get("flow_id") or ""),
-        str(raw_lesson.get("group") or ""),
-    ]
-    source_material = json.dumps(elements, ensure_ascii=False, separators=(",", ":"))
-    return f"fallback:{sha256(source_material.encode('utf-8')).hexdigest()}"
+    pair_id = raw_lesson.get("pair_id")
+    if pair_id is None:
+        raise ValueError("ITMO lesson does not contain pair_id")
+    return f"pair:{pair_id}"
 
 
 def _payload_hash(
@@ -134,7 +109,6 @@ def raw_lesson_to_sync_event(raw_lesson: dict) -> SyncEvent:
 
     return SyncEvent(
         source_uid=_raw_lesson_to_source_uid(raw_lesson),
-        legacy_source_uid=_legacy_source_uid(raw_lesson),
         summary=summary,
         start_iso=start_iso,
         end_iso=end_iso,

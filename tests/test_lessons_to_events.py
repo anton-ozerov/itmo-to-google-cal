@@ -29,7 +29,6 @@ class LessonConversionTests(unittest.TestCase):
         moved = raw_lesson_to_sync_event({**self.lesson, "time_start": "12:00", "time_end": "13:30"})
 
         assert original.source_uid == "pair:12345"
-        assert len(original.legacy_source_uid) == 64
         assert moved.source_uid == original.source_uid
         assert moved.payload_hash != original.payload_hash
 
@@ -38,13 +37,12 @@ class LessonConversionTests(unittest.TestCase):
         second = raw_lesson_to_sync_event(self.lesson)
 
         assert first.payload_hash == second.payload_hash
-        assert "Обновлено:" not in first.description
 
-    def test_fallback_distinguishes_parallel_lessons(self):
+    def test_pair_id_is_required(self):
         without_id = {key: value for key, value in self.lesson.items() if key != "pair_id"}
-        another_group = {**without_id, "group": "P0001"}
 
-        assert raw_lesson_to_sync_event(without_id).source_uid != raw_lesson_to_sync_event(another_group).source_uid
+        with self.assertRaisesRegex(ValueError, "pair_id"):  # noqa: PT027
+            raw_lesson_to_sync_event(without_id)
 
 
 if __name__ == "__main__":

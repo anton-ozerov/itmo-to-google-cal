@@ -105,11 +105,3 @@ async def try_acquire_sync_lock(connection: asyncpg.Connection) -> bool:
 
 async def release_sync_lock(connection: asyncpg.Connection) -> None:
     await connection.execute("SELECT pg_advisory_unlock(hashtext('itmo-google-calendar-sync'))")
-
-
-async def rename_state(connection: asyncpg.Connection, old_source_uid: str, new_source_uid: str) -> None:
-    await connection.execute(
-        "UPDATE synced_events SET source_uid = $2, updated_at = NOW() WHERE source_uid = $1",
-        old_source_uid,
-        new_source_uid,
-    )

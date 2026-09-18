@@ -12,7 +12,6 @@ from sync_state_repository import SyncState
 def make_event() -> SyncEvent:
     return SyncEvent(
         source_uid="pair:42",
-        legacy_source_uid="legacy-42",
         summary="Lesson",
         start_iso="2026-09-18T10:00:00+03:00",
         end_iso="2026-09-18T11:30:00+03:00",
@@ -69,20 +68,6 @@ class SyncEngineTests(unittest.IsolatedAsyncioTestCase):
         assert stats["deleted"] == 1
         delete.assert_awaited_once_with(unittest.mock.ANY, "calendar", google_event.event_id)
         assert upsert.await_args.args[4] == "deleted_from_source"
-
-    async def test_legacy_tombstone_is_migrated_to_pair_id(self):
-        event = make_event()
-        state = SyncState(event.legacy_source_uid, "google-42", "old-hash", "deleted_by_user", None)
-
-        with (
-            patch("sync_engine.load_states", AsyncMock(return_value={event.legacy_source_uid: state})),
-            patch("sync_engine.rename_state", AsyncMock()) as rename,
-            patch("sync_engine.list_managed_events", AsyncMock(return_value={})),
-        ):
-            stats = await synchronize(object(), "calendar", {event.source_uid: event}, object())
-
-        rename.assert_awaited_once_with(unittest.mock.ANY, event.legacy_source_uid, event.source_uid)
-        assert stats["skipped_manual_delete"] == 1
 
 
 if __name__ == "__main__":

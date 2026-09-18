@@ -14,7 +14,6 @@ from lessons_to_events import SyncEvent
 def make_event(**overrides) -> SyncEvent:
     values = {
         "source_uid": "pair:42",
-        "legacy_source_uid": "legacy-hash",
         "summary": "[Лек] Предмет",
         "start_iso": "2026-09-18T10:00:00+03:00",
         "end_iso": "2026-09-18T11:30:00+03:00",
@@ -72,25 +71,6 @@ class GooglePayloadTests(unittest.TestCase):
         payload = build_update_payload(new, existing, source_payload_for_event(old))
 
         assert "location" not in payload
-
-    def test_legacy_event_only_gets_private_metadata(self):
-        event = make_event()
-        existing = make_existing(event, private_properties={})
-        payload = build_update_payload(event, existing, None)
-
-        assert payload == {
-            "extendedProperties": {"private": {"itmoManaged": "true", "itmoSyncId": "pair:42"}},
-        }
-
-    def test_legacy_generated_timestamp_is_removed(self):
-        event = make_event()
-        description = (
-            f"{event.description}\nОбновлено: 2026-09-18 12:34 MSK\n\nITMO_SYNC_ID: {event.source_uid}"  # noqa: RUF001
-        )
-        existing = make_existing(event, description=description, private_properties={})
-        payload = build_update_payload(event, existing, None)
-
-        assert payload["description"] == f"{event.description}\n\nITMO_SYNC_ID: {event.source_uid}"
 
 
 if __name__ == "__main__":
