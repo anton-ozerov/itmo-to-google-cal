@@ -17,10 +17,8 @@
 ## Что нужно
 
 - Docker + Docker Compose
-- `credentials.json` одного из форматов:
-  - Service Account key JSON (`"type": "service_account"`), или
-  - OAuth Authorized User JSON (`"type": "authorized_user"`), или
-  - OAuth Client JSON (`"installed"` / `"web"`) + `ITMO_ICAL_GOOGLE_REFRESH_TOKEN`
+- OAuth Client `credentials.json` (`"installed"` или `"web"`);
+- refresh token в `ITMO_ICAL_GOOGLE_REFRESH_TOKEN`;
 - логин и пароль ИСУ
 - ID календаря Google (`ITMO_ICAL_GOOGLE_CALENDAR_ID`)
 
@@ -33,7 +31,7 @@ ITMO_ICAL_ISU_USERNAME=100000
 ITMO_ICAL_ISU_PASSWORD=XXXXXXXXXXXXX
 ITMO_ICAL_GOOGLE_CALENDAR_ID=primary
 ITMO_ICAL_DATABASE_URL=<postgres-connection-url>
-ITMO_ICAL_GOOGLE_REFRESH_TOKEN=<refresh-token> # только для credentials.json с "installed"/"web"
+ITMO_ICAL_GOOGLE_REFRESH_TOKEN=<refresh-token>
 ITMO_ICAL_SYNC_INTERVAL_SECONDS=7200
 ```
 

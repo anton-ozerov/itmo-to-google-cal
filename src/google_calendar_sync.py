@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from google.auth.transport.requests import Request
-from google.oauth2 import service_account
 from google.oauth2.credentials import Credentials as UserCredentials
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
@@ -39,20 +38,6 @@ class ExistingGoogleEvent:
     private_properties: dict[str, str]
 
 
-def _build_service_account_credentials(credentials_path: str):
-    return service_account.Credentials.from_service_account_file(
-        credentials_path,
-        scopes=[_CALENDAR_SCOPE],
-    )
-
-
-def _build_authorized_user_credentials(credentials_path: str):
-    credentials = UserCredentials.from_authorized_user_file(credentials_path, scopes=[_CALENDAR_SCOPE])
-    if not credentials.valid:
-        credentials.refresh(Request())
-    return credentials
-
-
 def _build_oauth_credentials_from_client_config(
     credentials_info: dict,
     refresh_token: str | None,
@@ -60,7 +45,7 @@ def _build_oauth_credentials_from_client_config(
 ):
     oauth_config = credentials_info.get("installed") or credentials_info.get("web")
     if not isinstance(oauth_config, dict):
-        raise TypeError("Unsupported Google credentials format")
+        raise TypeError("credentials.json must contain an installed or web OAuth client configuration")
 
     if not refresh_token:
         raise RuntimeError(
@@ -95,21 +80,7 @@ def build_service(credentials_path: str, refresh_token: str | None = None, token
     except Exception as error:
         raise RuntimeError(f"Failed to parse Google credentials file: {credentials_path}") from error
 
-    try:
-        if credentials_info.get("type") == "service_account":
-            credentials = _build_service_account_credentials(str(creds_path))
-        elif credentials_info.get("type") == "authorized_user":
-            credentials = _build_authorized_user_credentials(str(creds_path))
-        elif "installed" in credentials_info or "web" in credentials_info:
-            credentials = _build_oauth_credentials_from_client_config(credentials_info, refresh_token, token_uri)
-        else:
-            raise RuntimeError("Unsupported Google credentials format")  # noqa: TRY301
-    except Exception as error:
-        raise RuntimeError(
-            "Failed to initialize Google credentials. Supported formats: service account key JSON, "
-            "authorized_user JSON, or OAuth client JSON (installed/web) with ITMO_ICAL_GOOGLE_REFRESH_TOKEN.",
-        ) from error
-
+    credentials = _build_oauth_credentials_from_client_config(credentials_info, refresh_token, token_uri)
     return build("calendar", "v3", credentials=credentials, cache_discovery=False)
 
 

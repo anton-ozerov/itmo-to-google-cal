@@ -26,10 +26,12 @@ app.config.from_prefixed_env(prefix, loads=str)
 assert "ISU_USERNAME" in app.config, f"{prefix}_ISU_USERNAME env var is required"
 assert "ISU_PASSWORD" in app.config, f"{prefix}_ISU_PASSWORD env var is required"
 assert "GOOGLE_CALENDAR_ID" in app.config, f"{prefix}_GOOGLE_CALENDAR_ID env var is required"
+assert "GOOGLE_REFRESH_TOKEN" in app.config, f"{prefix}_GOOGLE_REFRESH_TOKEN env var is required"
 assert "DATABASE_URL" in app.config, f"{prefix}_DATABASE_URL env var is required"
 
 _google_credentials_path = app.config.get("GOOGLE_CREDENTIALS_PATH", "/app/credentials.json")
-_google_refresh_token = app.config.get("GOOGLE_REFRESH_TOKEN")
+_google_refresh_token = app.config["GOOGLE_REFRESH_TOKEN"]
+assert _google_refresh_token.strip(), f"{prefix}_GOOGLE_REFRESH_TOKEN must not be empty"
 _google_token_uri = app.config.get("GOOGLE_TOKEN_URI", "https://oauth2.googleapis.com/token")
 _google_calendar_id = app.config["GOOGLE_CALENDAR_ID"]
 assert _google_calendar_id.strip(), f"{prefix}_GOOGLE_CALENDAR_ID must not be empty"
